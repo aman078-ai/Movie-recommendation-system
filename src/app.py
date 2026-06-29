@@ -171,6 +171,24 @@ strategy_choice = st.sidebar.radio(
 )
 strategy = "shift_mood" if "Shift Mood" in strategy_choice else "lean_in"
 
+# Advanced Filters
+st.sidebar.subheader("🎯 Recommendation Filters")
+min_rating = st.sidebar.slider(
+    "Minimum Rating (1-10):",
+    min_value=1.0,
+    max_value=10.0,
+    value=6.0,
+    step=0.5,
+    help="Only show movies with a rating equal to or higher than this value."
+)
+
+sort_by_label = st.sidebar.selectbox(
+    "Sort Recommendations By:",
+    ["Rating (Highest First)", "Popularity (Most Popular First)"],
+    help="Select the metric used to rank the recommended movies."
+)
+sort_by = "vote_average" if "Rating" in sort_by_label else "popularity"
+
 # Custom TMDB API Key Input
 st.sidebar.subheader("🔑 API Setup")
 api_key_input = st.sidebar.text_input(
@@ -249,7 +267,9 @@ if user_query:
         dominant_emotion, recommendations = recommender.recommend(
             emotion_scores=emotions,
             strategy=strategy,
-            limit=5
+            limit=5,
+            min_rating=min_rating,
+            sort_by=sort_by
         )
         
     # Main results page split in two columns

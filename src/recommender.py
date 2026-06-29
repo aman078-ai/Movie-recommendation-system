@@ -56,7 +56,9 @@ class MovieRecommender:
         self, 
         emotion_scores: Dict[str, float], 
         strategy: str = "shift_mood", 
-        limit: int = 5
+        limit: int = 5,
+        min_rating: float = 6.0,
+        sort_by: str = "vote_average"
     ) -> Tuple[str, List[Dict[str, Any]]]:
         """
         Recommends movies based on the classified emotion.
@@ -65,6 +67,8 @@ class MovieRecommender:
             emotion_scores: Dict mapping emotion to probability confidence.
             strategy: Either "lean_in" (matching genre) or "shift_mood" (uplifting genre).
             limit: Number of recommendations to return.
+            min_rating: Minimum vote average rating for filtered movies.
+            sort_by: Primary sorting key ('vote_average' or 'popularity').
             
         Returns:
             A tuple of (dominant_emotion, list of recommended movie dicts).
@@ -87,9 +91,14 @@ class MovieRecommender:
             try:
                 movies = self.tmdb_client.discover_movies_by_genres(
                     genre_ids=target_genre_ids,
-                    min_rating=6.0,
+                    min_rating=min_rating,
                     limit=20
                 )
+                
+                # Apply local sorting if necessary
+                if movies:
+                    sort_key = "vote_average" if sort_by == "vote_average" else "popularity"
+                    movies = sorted(movies, key=lambda x: x.get(sort_key, 0.0), reverse=True)
             except Exception as e:
                 logger.error(f"Live TMDB discover failed: {e}. Falling back to local search.")
                 movies = []
@@ -97,7 +106,12 @@ class MovieRecommender:
         # 2. Fall back to local dataset if TMDB is offline or not configured
         if not movies:
             logger.info("Using local dataset to generate recommendations.")
-            movies = self._search_local_movies(target_genre_ids, limit=20)
+            movies = self._search_local_movies(
+                genre_ids=target_genre_ids, 
+                min_rating=min_rating, 
+                sort_by=sort_by, 
+                limit=20
+            )
             
         # 3. Format and enrich recommended movies
         formatted_recommendations = []
@@ -130,8 +144,14 @@ class MovieRecommender:
             
         return dominant_emotion, formatted_recommendations
 
-    def _search_local_movies(self, genre_ids: List[int], limit: int = 20) -> List[Dict[str, Any]]:
-        """Filters and ranks the local dataset by target genres."""
+    def _search_local_movies(
+        self, 
+        genre_ids: List[int], 
+        min_rating: float = 6.0, 
+        sort_by: str = "vote_average", 
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Filters and ranks the local dataset by target genres, minimum rating, and sorting criteria."""
         if self.local_df.empty:
             return []
             
@@ -142,14 +162,21 @@ class MovieRecommender:
         matched_mask = self.local_df["parsed_genres"].apply(has_matching_genre)
         filtered_df = self.local_df[matched_mask].copy()
         
+        # Apply minimum rating filter
+        filtered_df = filtered_df[filtered_df["vote_average"] >= min_rating]
+        
         if filtered_df.empty:
-            # If no matches, return top movies generally
-            logger.warning(f"No local movies found for genres {genre_ids}. Returning top local movies.")
-            filtered_df = self.local_df.copy()
+            # If no matches, return general movies matching the rating
+            logger.warning(f"No local movies found with rating >= {min_rating} for genres {genre_ids}. Relaxing constraints.")
+            filtered_df = self.local_df[self.local_df["vote_average"] >= min_rating].copy()
+            if filtered_df.empty:
+                # If still empty, return top movies generally
+                filtered_df = self.local_df.copy()
             
-        # Rank by vote_average descending, popularity descending
+        # Rank by user-specified preference
+        sort_keys = ["vote_average", "popularity"] if sort_by == "vote_average" else ["popularity", "vote_average"]
         ranked_df = filtered_df.sort_values(
-            by=["vote_average", "popularity"], 
+            by=sort_keys, 
             ascending=[False, False]
         )
         
