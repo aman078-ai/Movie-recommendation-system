@@ -4,6 +4,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 import time
+import pandas as pd
 from typing import Dict
 
 # Import core modules
@@ -235,111 +236,169 @@ else:
 
 st.info(db_status)
 
-# Quick sample prompts
-st.write("💡 **Not sure what to write? Click a quick-prompt:**")
-cols_prompts = st.columns(4)
-prompts = [
-    ("Angry & annoyed", "I had a terrible day at work and my boss is driving me crazy."),
-    ("Tired & sad", "Feeling a bit lonely tonight and just want a good cry."),
-    ("Happy & excited", "I just finished a huge exam and I am so excited for the weekend!"),
-    ("Scared & anxious", "It's late at night and I want a spooky movie to keep me awake.")
-]
+# Create tabs for layout
+tab_recs, tab_catalog, tab_info = st.tabs(["🎯 Emotion Recommendations", "🔍 Browse Catalog", "ℹ️ How it Works"])
 
-for i, (label, text) in enumerate(prompts):
-    with cols_prompts[i % 4]:
-        if st.button(label, key=f"btn_{i}", use_container_width=True):
-            set_sample_prompt(text)
+with tab_recs:
+    # Quick sample prompts
+    st.write("💡 **Not sure what to write? Click a quick-prompt:**")
+    cols_prompts = st.columns(4)
+    prompts = [
+        ("Angry & annoyed", "I had a terrible day at work and my boss is driving me crazy."),
+        ("Tired & sad", "Feeling a bit lonely tonight and just want a good cry."),
+        ("Happy & excited", "I just finished a huge exam and I am so excited for the weekend!"),
+        ("Scared & anxious", "It's late at night and I want a spooky movie to keep me awake.")
+    ]
 
-# Input box for user text
-user_query = st.text_input(
-    "How are you feeling right now? Type a sentence describing your day or mood:",
-    value=st.session_state.input_text,
-    key="main_input",
-    placeholder="e.g. I had an exhausting day, but I want to relax and watch something funny"
-)
+    for i, (label, text) in enumerate(prompts):
+        with cols_prompts[i % 4]:
+            if st.button(label, key=f"btn_{i}", use_container_width=True):
+                set_sample_prompt(text)
 
-# Recommendation execution
-if user_query:
-    with st.spinner("Analyzing emotion and sourcing recommendations..."):
-        # Initialize Classifier (cached resource dynamically loaded based on user selection)
-        classifier = get_classifier(use_fallback)
-        
-        # 1. Analyze Emotion
-        start_time = time.time()
-        emotions = classifier.predict(user_query)
-        elapsed_inference = time.time() - start_time
-        
-        # 2. Extract dominant emotion and query recommender
-        dominant_emotion, recommendations = recommender.recommend(
-            emotion_scores=emotions,
-            strategy=strategy,
-            limit=5,
-            min_rating=min_rating,
-            sort_by=sort_by,
-            excluded_genres=excluded_genres
-        )
-        
-    # Main results page split in two columns
-    col_analysis, col_recs = st.columns([1, 2])
-    
-    with col_analysis:
-        st.subheader("📊 Emotion Analysis")
-        st.write(f"Dominant Emotion: <span class='emotion-{dominant_emotion}'>{dominant_emotion.upper()}</span>", unsafe_allow_html=True)
-        st.caption(f"Inference computed in {elapsed_inference:.4f}s")
-        
-        # Plot distribution
-        for emotion, score in sorted(emotions.items(), key=lambda x: x[1], reverse=True):
-            st.write(f"**{emotion.capitalize()}** ({score*100:.1f}%)")
-            st.progress(score)
+    # Input box for user text
+    user_query = st.text_input(
+        "How are you feeling right now? Type a sentence describing your day or mood:",
+        value=st.session_state.input_text,
+        key="main_input",
+        placeholder="e.g. I had an exhausting day, but I want to relax and watch something funny"
+    )
+
+    # Recommendation execution
+    if user_query:
+        with st.spinner("Analyzing emotion and sourcing recommendations..."):
+            # Initialize Classifier (cached resource dynamically loaded based on user selection)
+            classifier = get_classifier(use_fallback)
             
-    with col_recs:
-        st.subheader(f"🍿 Recommended for You ({strategy_choice})")
-        st.write(f"We mapped your mood to these genres: " + ", ".join([
-            f"`{recommender.local_df['parsed_genres'].apply(lambda x: gid in recommender.local_df['parsed_genres'].iloc[0]).index[0]}`"
-            for gid in recommender.local_df.get("parsed_genres", [[]])[0] if gid in recommender.local_df.get("parsed_genres", [[]])[0]
-        ][:0] + [f"`{name}`" for name in [
-            recommender.local_df.columns[0] # dummy logic
-        ] if False] or ["Comfort/Standard Genres"])) # Simple print
+            # 1. Analyze Emotion
+            start_time = time.time()
+            emotions = classifier.predict(user_query)
+            elapsed_inference = time.time() - start_time
+            
+            # 2. Extract dominant emotion and query recommender
+            dominant_emotion, recommendations = recommender.recommend(
+                emotion_scores=emotions,
+                strategy=strategy,
+                limit=5,
+                min_rating=min_rating,
+                sort_by=sort_by,
+                excluded_genres=excluded_genres
+            )
+            
+        # Main results page split in two columns
+        col_analysis, col_recs = st.columns([1, 2])
         
-        # Display the recommendations
-        if not recommendations:
-            st.warning("No recommendations found. Try adjusting your search query.")
-        else:
-            for idx, movie in enumerate(recommendations):
-                # Custom HTML container representing movie details
-                genres_html = "".join([f"<span class='genre-badge'>{g}</span>" for g in movie['genres']])
+        with col_analysis:
+            st.subheader("📊 Emotion Analysis")
+            st.write(f"Dominant Emotion: <span class='emotion-{dominant_emotion}'>{dominant_emotion.upper()}</span>", unsafe_allow_html=True)
+            st.caption(f"Inference computed in {elapsed_inference:.4f}s")
+            
+            # Plot distribution
+            for emotion, score in sorted(emotions.items(), key=lambda x: x[1], reverse=True):
+                st.write(f"**{emotion.capitalize()}** ({score*100:.1f}%)")
+                st.progress(score)
                 
-                # HTML Card
-                card_html = f"""
-                <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-                    <div style="display: flex; gap: 16px;">
-                        <div style="flex: 0 0 100px;">
-                            <img src="{movie['poster_url']}" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);"/>
-                        </div>
-                        <div style="flex: 1;">
-                            <div style="font-size: 1.3rem; font-weight: 600; color: #FF4B4B; margin-bottom: 4px;">{movie['title']}</div>
-                            <div style="margin-bottom: 8px;">
-                                <span class="rating-badge">⭐ {movie['vote_average']:.1f}</span>
-                                <span style="font-size: 0.9rem; color: #888;">Released: {movie['release_date']}</span>
+        with col_recs:
+            st.subheader(f"🍿 Recommended for You ({strategy_choice})")
+            
+            # Resolve target genre IDs mapping to this emotion & strategy
+            from src.config import EMOTION_GENRE_MAPPING
+            mapping = EMOTION_GENRE_MAPPING.get(dominant_emotion, EMOTION_GENRE_MAPPING["neutral"])
+            target_genre_ids = mapping.get(strategy, mapping["shift_mood"])
+            mapped_genres = [GENRES.get(gid, "Unknown") for gid in target_genre_ids if gid in GENRES]
+            st.write(f"We mapped your mood to these genres: " + ", ".join([f"`{name}`" for name in mapped_genres]))
+            
+            # Display the recommendations
+            if not recommendations:
+                st.warning("No recommendations found. Try adjusting your search query.")
+            else:
+                for idx, movie in enumerate(recommendations):
+                    # Custom HTML container representing movie details
+                    genres_html = "".join([f"<span class='genre-badge'>{g}</span>" for g in movie['genres']])
+                    
+                    # HTML Card
+                    card_html = f"""
+                    <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                        <div style="display: flex; gap: 16px;">
+                            <div style="flex: 0 0 100px;">
+                                <img src="{movie['poster_url']}" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);"/>
                             </div>
-                            <div style="margin-bottom: 8px;">
-                                {genres_html}
+                            <div style="flex: 1;">
+                                <div style="font-size: 1.3rem; font-weight: 600; color: #FF4B4B; margin-bottom: 4px;">{movie['title']}</div>
+                                <div style="margin-bottom: 8px;">
+                                    <span class="rating-badge">⭐ {movie['vote_average']:.1f}</span>
+                                    <span style="font-size: 0.9rem; color: #888;">Released: {movie['release_date']}</span>
+                                </div>
+                                <div style="margin-bottom: 8px;">
+                                    {genres_html}
+                                </div>
+                                <div style="font-size: 0.95rem; line-height: 1.4; color: #ccc;">{movie['overview']}</div>
                             </div>
-                            <div style="font-size: 0.95rem; line-height: 1.4; color: #ccc;">{movie['overview']}</div>
                         </div>
                     </div>
-                </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
+    else:
+        st.info("👈 Describe your mood in the text box above to get instant personalized movie recommendations!")
+
+with tab_catalog:
+    st.subheader("🔍 Browse Movie Catalog")
+    st.write("Search and browse the offline movie database containing a curated list of classics.")
+    
+    search_query = st.text_input("Search movies by title:", placeholder="e.g. Inception, Dark Knight...")
+    
+    if not recommender.local_df.empty:
+        if search_query:
+            filtered_movies = recommender.local_df[recommender.local_df["title"].str.contains(search_query, case=False, na=False)]
+        else:
+            filtered_movies = recommender.local_df
+            
+        st.write(f"Showing {len(filtered_movies)} of {len(recommender.local_df)} movies in database:")
+        
+        for idx, row in filtered_movies.iterrows():
+            genres_list = row["parsed_genres"]
+            genre_names = [GENRES.get(gid, "Unknown") for gid in genres_list if gid in GENRES]
+            genres_html = "".join([f"<span class='genre-badge'>{g}</span>" for g in genre_names])
+            
+            poster_path = row["poster_path"] if not pd.isna(row["poster_path"]) else ""
+            if poster_path:
+                if poster_path.startswith("http"):
+                    poster_url = poster_path
+                else:
+                    poster_url = f"{TMDB_IMAGE_BASE_URL}{poster_path}"
+            else:
+                poster_url = "https://images.unsplash.com/photo-1542204172-e7052809a936?q=80&w=300&auto=format&fit=crop"
                 
-else:
-    st.write("---")
-    st.write("### How it works")
+            card_html = f"""
+            <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                <div style="display: flex; gap: 16px;">
+                    <div style="flex: 0 0 80px;">
+                        <img src="{poster_url}" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);"/>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 1.15rem; font-weight: 600; color: #FF4B4B; margin-bottom: 4px;">{row['title']}</div>
+                        <div style="margin-bottom: 8px;">
+                            <span class="rating-badge">⭐ {row['vote_average']:.1f}</span>
+                            <span style="font-size: 0.9rem; color: #888;">Released: {row['release_date']}</span>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            {genres_html}
+                        </div>
+                        <div style="font-size: 0.9rem; line-height: 1.4; color: #ccc;">{row['overview']}</div>
+                    </div>
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
+    else:
+        st.warning("Local movie catalog is currently empty.")
+
+with tab_info:
+    st.write("### How it Works & Core Technologies")
     
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("#### 1. Express Your Mood")
-        st.write("Describe your day, feelings, or what kind of vibe you are looking for in the text bar above.")
+        st.write("Describe your day, feelings, or what kind of vibe you are looking for in the text bar inside **Emotion Recommendations**.")
         st.caption("Example: 'I had an exhausting day, but I want to relax and watch something funny'")
         
     with col2:
