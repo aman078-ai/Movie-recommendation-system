@@ -58,7 +58,8 @@ class MovieRecommender:
         strategy: str = "shift_mood", 
         limit: int = 5,
         min_rating: float = 6.0,
-        sort_by: str = "vote_average"
+        sort_by: str = "vote_average",
+        excluded_genres: List[str] = None
     ) -> Tuple[str, List[Dict[str, Any]]]:
         """
         Recommends movies based on the classified emotion.
@@ -69,6 +70,7 @@ class MovieRecommender:
             limit: Number of recommendations to return.
             min_rating: Minimum vote average rating for filtered movies.
             sort_by: Primary sorting key ('vote_average' or 'popularity').
+            excluded_genres: List of genre names to exclude from recommendations.
             
         Returns:
             A tuple of (dominant_emotion, list of recommended movie dicts).
@@ -115,10 +117,16 @@ class MovieRecommender:
             
         # 3. Format and enrich recommended movies
         formatted_recommendations = []
-        for movie in movies[:limit]:
+        for movie in movies:
             # Convert genre IDs to human-readable names
             genre_ids = movie.get("genres", [])
             genre_names = [GENRES.get(gid, "Unknown") for gid in genre_ids if gid in GENRES]
+            
+            # Check for excluded genres
+            if excluded_genres:
+                excluded_set = {eg.lower() for eg in excluded_genres}
+                if any(name.lower() in excluded_set for name in genre_names):
+                    continue
             
             # Resolve poster URL
             poster_path = movie.get("poster_path", "")
@@ -141,6 +149,9 @@ class MovieRecommender:
                 "release_date": movie.get("release_date", "N/A"),
                 "poster_url": poster_url
             })
+            
+            if len(formatted_recommendations) >= limit:
+                break
             
         return dominant_emotion, formatted_recommendations
 

@@ -7,7 +7,7 @@ import time
 from typing import Dict
 
 # Import core modules
-from src.config import TMDB_API_KEY
+from src.config import TMDB_API_KEY, GENRES
 from src.emotion_classifier import EmotionClassifier
 from src.recommender import MovieRecommender
 
@@ -189,6 +189,12 @@ sort_by_label = st.sidebar.selectbox(
 )
 sort_by = "vote_average" if "Rating" in sort_by_label else "popularity"
 
+excluded_genres = st.sidebar.multiselect(
+    "Exclude Genres:",
+    options=sorted(list(GENRES.values())),
+    help="Exclude movies belonging to these genres from the recommendations."
+)
+
 # Custom TMDB API Key Input
 st.sidebar.subheader("🔑 API Setup")
 api_key_input = st.sidebar.text_input(
@@ -269,7 +275,8 @@ if user_query:
             strategy=strategy,
             limit=5,
             min_rating=min_rating,
-            sort_by=sort_by
+            sort_by=sort_by,
+            excluded_genres=excluded_genres
         )
         
     # Main results page split in two columns
