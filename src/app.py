@@ -151,6 +151,18 @@ if "input_text" not in st.session_state:
 def set_sample_prompt(prompt: str):
     st.session_state.input_text = prompt
 
+import datetime
+
+def log_query(query: str, dominant_emotion: str, elapsed: float):
+    """Appends user query, detected emotion, and inference latency to history.log."""
+    log_path = Path(__file__).resolve().parent.parent / "data" / "history.log"
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] Query: \"{query}\" | Emotion: {dominant_emotion.upper()} | Time: {elapsed:.4f}s\n")
+    except Exception:
+        pass
+
 # Sidebar configurations
 st.sidebar.image("https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=200&auto=format&fit=crop", use_container_width=True)
 st.sidebar.title("⚙️ Control Panel")
@@ -237,7 +249,7 @@ else:
 st.info(db_status)
 
 # Create tabs for layout
-tab_recs, tab_catalog, tab_info = st.tabs(["🎯 Emotion Recommendations", "🔍 Browse Catalog", "ℹ️ How it Works"])
+tab_recs, tab_catalog, tab_history, tab_info = st.tabs(["🎯 Emotion Recommendations", "🔍 Browse Catalog", "📜 Usage History", "ℹ️ How it Works"])
 
 with tab_recs:
     # Quick sample prompts
@@ -283,6 +295,9 @@ with tab_recs:
                 sort_by=sort_by,
                 excluded_genres=excluded_genres
             )
+            
+            # Log the query request
+            log_query(user_query, dominant_emotion, elapsed_inference)
             
         # Main results page split in two columns
         col_analysis, col_recs = st.columns([1, 2])
@@ -391,6 +406,28 @@ with tab_catalog:
             st.markdown(card_html, unsafe_allow_html=True)
     else:
         st.warning("Local movie catalog is currently empty.")
+
+with tab_history:
+    st.subheader("📜 Recent Usage History")
+    st.write("Below are the recent queries analyzed by the system (saved locally in `data/history.log`):")
+    
+    log_path = Path(__file__).resolve().parent.parent / "data" / "history.log"
+    if log_path.exists():
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            if lines:
+                # Show last 10 queries
+                log_html = ""
+                for line in reversed(lines[-10:]):
+                    log_html += f"<div style='font-family: monospace; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; margin-bottom: 6px; border: 1px solid rgba(255,255,255,0.05);'>{line.strip()}</div>"
+                st.markdown(log_html, unsafe_allow_html=True)
+            else:
+                st.info("No query logs recorded yet.")
+        except Exception as e:
+            st.error(f"Failed to read logs: {e}")
+    else:
+        st.info("No query logs recorded yet. Try entering a search above to generate some logs!")
 
 with tab_info:
     st.write("### How it Works & Core Technologies")
